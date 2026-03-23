@@ -152,3 +152,28 @@ class EmployeeFeedbackRecord(BaseModel):
     primary_reason: EmployeeFeedbackReason
     free_text_explanation: Optional[str] = None
 
+
+class CsvRowEvaluationResult(BaseModel):
+    row_index: int
+    employee_id: str
+    will_decline: Optional[bool] = None
+    decline_probability: Optional[float] = None
+    recommended_actions: List[str] = Field(default_factory=list)
+    status: str = Field(
+        ...,
+        description="Row processing status: success or error.",
+    )
+    error: Optional[str] = None
+
+
+class CsvBatchEvaluationResponse(BaseModel):
+    job_id: str
+    total_rows: int
+    successful_rows: int
+    failed_rows: int
+    rows: List[CsvRowEvaluationResult] = Field(default_factory=list)
+    download_url: str = Field(
+        ...,
+        description="Endpoint URL to download the augmented CSV result.",
+    )
+

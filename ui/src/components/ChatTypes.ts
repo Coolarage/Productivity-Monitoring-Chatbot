@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 export type ChatSender = 'user' | 'bot'
 
 export type ChatMessage = {
@@ -7,7 +9,7 @@ export type ChatMessage = {
   /**
    * Optional structured section, e.g. recommendations list.
    */
-  details?: React.ReactNode
+  details?: ReactNode
   timestamp: string
 }
 

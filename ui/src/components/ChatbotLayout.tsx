@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react'
-import { postEvaluate } from '../api'
-import type { EvaluationResult } from '../types'
+import { useRef, useState } from 'react'
+import { getCsvDownloadUrl, postEvaluateCsv } from '../api'
+import type { CsvBatchEvaluationResponse } from '../types'
 import type { ChatMessage } from './ChatTypes'
 import { ChatWindow } from './ChatWindow'
-import { KpiForm } from './KpiForm'
 import './ChatbotLayout.css'
 
 function nowTime() {
@@ -19,92 +18,111 @@ export function ChatbotLayout() {
       id: 'welcome',
       sender: 'bot',
       text:
-        'Welcome to the productivity assistant. Share your latest KPIs and I will provide a prediction and practical recommendations. These insights are decision support, not a final judgment.',
+        'Welcome to the productivity assistant. Upload a CSV file with employee KPI records, and I will evaluate each employee, provide decline probability and recommendations, and keep this as decision support rather than a final judgment.',
       timestamp: nowTime(),
     },
   ])
+  const [inputText, setInputText] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const handleEvaluate = async (evaluationInput: {
-    payload: Parameters<typeof postEvaluate>[0]
-    summaryText: string
-  }) => {
+  const handleUploadAndEvaluate = async () => {
+    if (!selectedFile) {
+      setError('Please attach a CSV file first.')
+      return
+    }
+
     setError(null)
     setLoading(true)
-
-    // Add user message summarizing what was sent
+    const userText =
+      inputText.trim() ||
+      `Please evaluate uploaded CSV file: ${selectedFile.name}`
     setMessages((prev) => [
       ...prev,
       {
         id: `user-${Date.now()}`,
         sender: 'user',
-        text: evaluationInput.summaryText,
+        text: userText,
         timestamp: nowTime(),
       },
       {
         id: `bot-loading-${Date.now()}`,
         sender: 'bot',
-        text: 'Analyzing your KPIs. Please wait a moment...',
+        text: 'Analyzing uploaded CSV rows and sending employee-manager notifications...',
         timestamp: nowTime(),
       },
     ])
 
     try {
-      const result: EvaluationResult = await postEvaluate(
-        evaluationInput.payload,
+      const result: CsvBatchEvaluationResponse = await postEvaluateCsv(
+        selectedFile,
       )
 
       setMessages((prev) => {
         const withoutLast = prev.slice(0, -1)
-
-        const s = result.summary
-        const summaryText =
-          s.label === 'no_decline'
-            ? 'The system does not predict a near-term productivity decline based on your recent indicators.'
-            : 'The system indicates an elevated risk of productivity decline based on your recent indicators.'
+        const summaryText = `Processed ${result.total_rows} row(s): ${result.successful_rows} successful, ${result.failed_rows} failed.`
 
         const details = (
           <div className="bot-details">
             <div className="bot-section">
-              <h4>Summary</h4>
-              <p>{s.explanation}</p>
-              {s.confidence != null && (
-                <p>
-                  Model confidence (decline risk):{' '}
-                  {s.confidence.toFixed(2)}
-                </p>
-              )}
+              <h4>Batch summary</h4>
+              <p>{summaryText}</p>
             </div>
-            {s.weak_areas.length > 0 && (
-              <div className="bot-section">
-                <h4>Focus areas</h4>
-                <ul>
-                  {s.weak_areas.map((w) => (
-                    <li key={w}>{w}</li>
+
+            <div className="bot-section table-scroll">
+              <table className="result-table">
+                <thead>
+                  <tr>
+                    <th>employee_id</th>
+                    <th>will_decline</th>
+                    <th>decline_probability</th>
+                    <th>recommended_actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.rows.map((row) => (
+                    <tr key={`${row.employee_id}-${row.row_index}`}>
+                      <td>{row.employee_id}</td>
+                      <td>
+                        {row.will_decline == null
+                          ? '-'
+                          : String(row.will_decline)}
+                      </td>
+                      <td>
+                        {row.decline_probability == null
+                          ? '-'
+                          : row.decline_probability.toFixed(4)}
+                      </td>
+                      <td>
+                        {row.status === 'error'
+                          ? `ERROR: ${row.error || 'row processing failed'}`
+                          : (
+                              <ol className="recommended-actions-list">
+                                {row.recommended_actions.map((action, idx) => (
+                                  <li key={`${row.employee_id}-action-${idx}`}>
+                                    {action}
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                      </td>
+                    </tr>
                   ))}
-                </ul>
-              </div>
-            )}
-            {s.recommendations.length > 0 && (
-              <div className="bot-section">
-                <h4>Suggested actions</h4>
-                <ul>
-                  {s.recommendations.map((r, idx) => (
-                    <li key={`${r.area}-${idx}`}>
-                      <strong>{r.area}:</strong> {r.description}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                </tbody>
+              </table>
+            </div>
+
             <div className="bot-section">
-              <p className="bot-note">
-                Use these insights together with your manager’s judgment. If
-                you are experiencing workload pressure, unclear tasks,
-                technical blockers, personal circumstances, or insufficient
-                training, consider discussing these factors directly.
-              </p>
+              <a
+                className="download-link"
+                href={getCsvDownloadUrl(result.download_url)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Download augmented CSV result
+              </a>
             </div>
           </div>
         )
@@ -133,12 +151,17 @@ export function ChatbotLayout() {
           id: `bot-error-${Date.now()}`,
           sender: 'bot',
           text:
-            'I was not able to reach the evaluation service. Please check that the backend is running and try again.',
+            'I was not able to process the CSV evaluation. Please verify backend status, CSV column structure, and email credentials.',
           timestamp: nowTime(),
         },
       ])
     } finally {
       setLoading(false)
+      setInputText('')
+      setSelectedFile(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
@@ -147,19 +170,55 @@ export function ChatbotLayout() {
       <header className="app-header">
         <h1>Proactive Productivity Chatbot</h1>
         <p>
-          Decision-support assistant for monitoring productivity and
-          suggesting next steps.
+          Decision-support assistant for batch productivity evaluation.
         </p>
       </header>
       <main className="app-main">
         <section className="chat-section">
           <ChatWindow messages={messages} />
         </section>
-        <section className="form-section">
-          <KpiForm onSubmitEvaluate={handleEvaluate} loading={loading} />
-          {error && <p className="error-text">{error}</p>}
-        </section>
       </main>
+      <footer className="chat-composer">
+        <button
+          type="button"
+          className="attach-button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={loading}
+          aria-label="Attach CSV file"
+          title="Attach CSV"
+        >
+          📎
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden-file-input"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null
+            setSelectedFile(file)
+          }}
+        />
+        <input
+          className="composer-input"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          placeholder="Add optional note and upload CSV with employee rows..."
+          disabled={loading}
+        />
+        <button
+          type="button"
+          className="send-button"
+          onClick={handleUploadAndEvaluate}
+          disabled={loading}
+        >
+          {loading ? 'Processing...' : 'Evaluate CSV'}
+        </button>
+      </footer>
+      {selectedFile && (
+        <div className="selected-file-banner">Attached: {selectedFile.name}</div>
+      )}
+      {error && <p className="error-text">{error}</p>}
     </div>
   )
 }

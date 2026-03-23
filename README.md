@@ -52,7 +52,44 @@ uvicorn plugin.api:app --reload
 4. Use the OpenAPI docs at `http://localhost:8000/docs` to:
 
 - Submit an evaluation (`POST /evaluate`)
+- Submit CSV batch evaluation (`POST /evaluate/csv`)
+- Download augmented CSV (`GET /evaluate/csv/{job_id}/download`)
 - Submit manager review (`POST /manager/review`)
 - Submit employee explanation (`POST /employee/feedback`)
 - Retrieve stored evaluations (`GET /evaluations/{evaluation_id}`)
+
+### CSV upload format (batch mode)
+
+Use `POST /evaluate/csv` with a `.csv` file where each row is one employee.
+
+Required identity columns:
+
+- `employee_id`
+- `employee_email`
+- `manager_id`
+- `manager_email`
+
+Recommended KPI columns (same schema used by preprocessing):
+
+- `date`
+- `department`
+- `team`
+- `targeted_productivity`
+- `actual_productivity`
+- `smv`
+- `wip`
+- `over_time`
+- `incentive`
+- `idle_time`
+- `idle_men`
+- `no_of_style_change`
+- `no_of_workers`
+
+Batch response includes row-level results and a download URL for an
+augmented CSV containing original columns plus:
+
+- `decline_probability`
+- `recommended_actions`
+- `status`
+- `error`
 

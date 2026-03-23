@@ -36,6 +36,13 @@ credentials.*
 *.log
 logs/
 
+# --- Generated evaluation outputs ---
+tmp_csv_outputs/
+evaluated_*.csv
+generated_*.csv
+*.xlsx
+*.xls
+
 # --- OS / editor ---
 .DS_Store
 Thumbs.db

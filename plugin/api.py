@@ -1,15 +1,22 @@
 from __future__ import annotations
 
-from typing import List
+import csv
+import io
+from pathlib import Path
+from typing import Any, Dict, List
+import uuid
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .chatbot_logic import build_evaluation_summary
 from .email_service import ConsoleEmailSender, EmailSender, SmtpEmailSender
 from .model_pipeline import get_model_pipeline
 from .repository import InMemoryEvaluationRepository
 from .schemas import (
+    CsvBatchEvaluationResponse,
+    CsvRowEvaluationResult,
     EmailNotification,
     EmployeeFeedbackRecord,
     EmployeeFeedbackRequest,
@@ -49,6 +56,8 @@ _repo = InMemoryEvaluationRepository()
 # change this line locally to use SmtpEmailSender() and fill in the
 # dummy credentials in SmtpEmailSender.
 _email_sender: EmailSender = SmtpEmailSender()
+_csv_output_dir = Path(__file__).resolve().parent.parent / "tmp_csv_outputs"
+_csv_output_dir.mkdir(parents=True, exist_ok=True)
 
 
 def get_repo() -> InMemoryEvaluationRepository:
@@ -120,6 +129,176 @@ def evaluate_employee(
     email_sender.send_bulk([employee_email, manager_email])
 
     return evaluation
+
+
+@app.post(
+    "/evaluate/csv",
+    response_model=CsvBatchEvaluationResponse,
+    summary="Batch evaluate employees from CSV",
+)
+async def evaluate_employees_csv(
+    file: UploadFile = File(...),
+    repo: InMemoryEvaluationRepository = Depends(get_repo),
+    email_sender: EmailSender = Depends(get_email_sender),
+) -> CsvBatchEvaluationResponse:
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please upload a CSV file.",
+        )
+
+    raw_bytes = await file.read()
+    try:
+        text = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV must be UTF-8 encoded.",
+        ) from exc
+
+    reader = csv.DictReader(io.StringIO(text))
+    rows_in = list(reader)
+    if not rows_in:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV is empty.",
+        )
+
+    required_cols = {"employee_id", "employee_email", "manager_id", "manager_email"}
+    missing_cols = required_cols - set(reader.fieldnames or [])
+    if missing_cols:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"CSV missing required columns: {', '.join(sorted(missing_cols))}",
+        )
+
+    job_id = str(uuid.uuid4())
+    result_rows: List[CsvRowEvaluationResult] = []
+    augmented_rows: List[Dict[str, Any]] = []
+
+    successful_rows = 0
+    failed_rows = 0
+    pipeline = get_model_pipeline()
+
+    for idx, csv_row in enumerate(rows_in, start=1):
+        employee_id = str(csv_row.get("employee_id", "")).strip()
+        row_augmented: Dict[str, Any] = dict(csv_row)
+        try:
+            payload = EmployeeKPIInput(**csv_row)
+            raw_record = payload.to_raw_record()
+            prediction = pipeline.predict(raw_record)
+            summary = build_evaluation_summary(
+                label=prediction["label"],
+                proba_decline=prediction["proba_decline"],
+                features=prediction["features"],
+            )
+
+            evaluation_id = repo.generate_id()
+            evaluation = EvaluationResult(
+                evaluation_id=evaluation_id,
+                employee_id=payload.employee_id,
+                manager_id=payload.manager_id,
+                summary=summary,
+                raw_features=prediction["features"],
+                model_output={
+                    "label": prediction["label"],
+                    "proba_decline": prediction["proba_decline"],
+                },
+            )
+            repo.create_evaluation(evaluation)
+
+            employee_email = EmailNotification(
+                to=payload.employee_email,
+                subject="Productivity Insight and Recommended Actions",
+                body=_build_employee_email_body(payload, evaluation),
+            )
+            manager_email = EmailNotification(
+                to=payload.manager_email,
+                subject="Manager Review Required: Productivity Insight",
+                body=_build_manager_email_body(payload, evaluation),
+            )
+            email_sender.send_bulk([employee_email, manager_email])
+
+            recommendations = [r.description for r in summary.recommendations]
+            decline_probability = summary.confidence
+            will_decline = summary.label.value == "decline_risk"
+            result_rows.append(
+                CsvRowEvaluationResult(
+                    row_index=idx,
+                    employee_id=payload.employee_id,
+                    will_decline=will_decline,
+                    decline_probability=decline_probability,
+                    recommended_actions=recommendations,
+                    status="success",
+                )
+            )
+            row_augmented["will_decline"] = str(will_decline).lower()
+            row_augmented["decline_probability"] = (
+                "" if decline_probability is None else f"{decline_probability:.6f}"
+            )
+            row_augmented["recommended_actions"] = " ; ".join(recommendations)
+            row_augmented["status"] = "success"
+            row_augmented["error"] = ""
+            successful_rows += 1
+        except Exception as exc:
+            err_msg = str(exc)
+            result_rows.append(
+                CsvRowEvaluationResult(
+                    row_index=idx,
+                    employee_id=employee_id or f"row_{idx}",
+                    will_decline=None,
+                    decline_probability=None,
+                    recommended_actions=[],
+                    status="error",
+                    error=err_msg,
+                )
+            )
+            row_augmented["will_decline"] = ""
+            row_augmented["decline_probability"] = ""
+            row_augmented["recommended_actions"] = ""
+            row_augmented["status"] = "error"
+            row_augmented["error"] = err_msg
+            failed_rows += 1
+
+        augmented_rows.append(row_augmented)
+
+    output_path = _csv_output_dir / f"{job_id}.csv"
+    output_fieldnames: List[str] = []
+    for r in augmented_rows:
+        for k in r.keys():
+            if k not in output_fieldnames:
+                output_fieldnames.append(k)
+    with output_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=output_fieldnames)
+        writer.writeheader()
+        writer.writerows(augmented_rows)
+
+    return CsvBatchEvaluationResponse(
+        job_id=job_id,
+        total_rows=len(rows_in),
+        successful_rows=successful_rows,
+        failed_rows=failed_rows,
+        rows=result_rows,
+        download_url=f"/evaluate/csv/{job_id}/download",
+    )
+
+
+@app.get(
+    "/evaluate/csv/{job_id}/download",
+    summary="Download augmented CSV result",
+)
+def download_evaluated_csv(job_id: str) -> FileResponse:
+    csv_path = _csv_output_dir / f"{job_id}.csv"
+    if not csv_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="CSV result not found for this job id.",
+        )
+    return FileResponse(
+        path=csv_path,
+        media_type="text/csv",
+        filename=f"evaluated_{job_id}.csv",
+    )
 
 
 @app.post(

@@ -23,22 +23,16 @@
 
 .app-main {
   flex: 1;
-  display: flex;
-  gap: 24px;
-  padding: 0 32px 32px;
-  max-width: 1120px;
-  width: 100%;
+  display: block;
+  padding: 0 24px 12px;
+  max-width: 1320px;
+  width: min(1320px, 100%);
   margin: 0 auto;
   box-sizing: border-box;
 }
 
-.chat-section,
-.form-section {
-  flex: 1;
-}
-
-.form-section {
-  max-width: 420px;
+.chat-section {
+  height: calc(100vh - 220px);
 }
 
 .bot-section h4 {
@@ -51,18 +45,106 @@
 }
 
 .error-text {
-  margin-top: 8px;
+  margin: 6px 24px 12px;
   color: #b91c1c;
   font-size: 0.9rem;
 }
 
+.chat-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  padding: 12px 24px 18px;
+  border-top: 1px solid #e5e7eb;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(4px);
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.attach-button,
+.send-button {
+  border: none;
+  border-radius: 10px;
+  background: #0f766e;
+  color: #f9fafb;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 14px;
+}
+
+.attach-button {
+  font-size: 1.1rem;
+}
+
+.attach-button:disabled,
+.send-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.composer-input {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.selected-file-banner {
+  margin: 0 24px 8px;
+  color: #0f766e;
+  font-size: 0.88rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.result-table th,
+.result-table td {
+  border: 1px solid #e5e7eb;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.recommended-actions-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.download-link {
+  color: #0f766e;
+  text-decoration: underline;
+}
+
 @media (max-width: 900px) {
   .app-main {
-    flex-direction: column;
+    padding: 0 12px 8px;
   }
 
-  .form-section {
-    max-width: none;
+  .chat-section {
+    height: calc(100vh - 235px);
+  }
+
+  .chat-composer {
+    padding: 10px 12px 14px;
+  }
+
+  .selected-file-banner,
+  .error-text {
+    margin-left: 12px;
+    margin-right: 12px;
   }
 }
 

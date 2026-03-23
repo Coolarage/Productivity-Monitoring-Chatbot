@@ -19,6 +19,25 @@ export type EvaluationResult = {
   summary: EvaluationSummary
 }
 
+export type CsvRowEvaluationResult = {
+  row_index: number
+  employee_id: string
+  will_decline: boolean | null
+  decline_probability: number | null
+  recommended_actions: string[]
+  status: 'success' | 'error' | string
+  error?: string | null
+}
+
+export type CsvBatchEvaluationResponse = {
+  job_id: string
+  total_rows: number
+  successful_rows: number
+  failed_rows: number
+  rows: CsvRowEvaluationResult[]
+  download_url: string
+}
+
 export type EmployeeKpiInput = {
   employee_id: string
   employee_email: string

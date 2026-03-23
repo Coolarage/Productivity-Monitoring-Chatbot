@@ -2,11 +2,12 @@
   background: #f7f7fb;
   border-radius: 12px;
   padding: 16px;
-  height: 480px;
+  height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-sizing: border-box;
 }
 
 .chat-message {
