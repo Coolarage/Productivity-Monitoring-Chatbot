@@ -38,6 +38,9 @@ class ConsoleEmailSender(EmailSender):
         print(f"Subject: {email.subject}")
         print("Body:")
         print(email.body)
+        if email.html_body:
+            print("HTML Body:")
+            print(email.html_body)
         print("--- End Email ---\n")
 
 
@@ -69,6 +72,8 @@ class SmtpEmailSender(EmailSender):
         msg["To"] = email.to
         msg["Subject"] = email.subject
         msg.set_content(email.body)
+        if email.html_body:
+            msg.add_alternative(email.html_body, subtype="html")
 
         context = ssl.create_default_context()
         with smtplib.SMTP(self.host, self.port) as server:

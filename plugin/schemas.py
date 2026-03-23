@@ -100,6 +100,7 @@ class EmailNotification(BaseModel):
     to: str
     subject: str
     body: str
+    html_body: Optional[str] = None
 
 
 class ManagerDecision(str, Enum):
