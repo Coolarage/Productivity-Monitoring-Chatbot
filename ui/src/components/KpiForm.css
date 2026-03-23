@@ -1,0 +1,65 @@
+.kpi-form {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px 18px 20px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kpi-form h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.kpi-form-description {
+  margin: 4px 0 8px;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.kpi-grid label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  gap: 4px;
+}
+
+.kpi-grid input,
+.kpi-grid select {
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+}
+
+.kpi-submit {
+  margin-top: 8px;
+  align-self: flex-end;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: none;
+  background: #0f766e;
+  color: #f9fafb;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.kpi-submit:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+@media (max-width: 900px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

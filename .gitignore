@@ -1,0 +1,51 @@
+# --- Python backend ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Model / local artifacts ---
+*.pkl
+*.joblib
+*.sqlite3
+*.db
+
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example
+secrets.*
+credentials.*
+
+# --- Logs ---
+*.log
+logs/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- Frontend (ui/) ---
+ui/node_modules/
+ui/dist/
+ui/.env
+ui/.env.*
+!ui/.env.example
+
